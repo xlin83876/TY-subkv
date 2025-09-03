@@ -80,7 +80,7 @@ let BotToken = '';
 let ChatID = '';
 let 临时中转域名 = [];
 let 临时中转域名接口 = '';
-let EndPS = '【请勿测速】';
+let EndPS = '';
 let 协议类型 = atob(`\u0056\u006b\u0078\u0046\u0055\u0031\u004d\u003d`);
 let FileName = '极链订阅生成器';
 let SUBUpdateTime = 3;
@@ -1606,3 +1606,4 @@ return new Response(HTML, {
   },
 });
 }
+
