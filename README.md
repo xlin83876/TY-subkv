@@ -16,8 +16,7 @@
 | DLS | `8` |`addressescsv`测速结果满足速度下限 | 
 | SUBAPI | `subapi.cmliussss.net` | clash、singbox等 订阅转换后端 | 
 | SUBCONFIG | [https://raw.github.../ACL4SSR_Online_Full_MultiMode.ini](https://raw.githubusercontent.com/cmliu/ACL4SSR/main/Clash/config/ACL4SSR_Online_Full_MultiMode.ini) | clash、singbox等 订阅转换配置文件 | 
-| SUBNAME | `优选订阅生成器` | 订阅生成器名称 |  
-| BEIAN | `提供维护: <a href='https://t.me/CMLiussss'>CMLiussss</a>` | 主页维护信息 | 
+| SUBNAME | `优选订阅生成器` | 订阅生成器名称 |   
 | PS | `【请勿测速】` | 节点名备注消息 | 
 | COLOR | `1-10` | 不同颜色主题 |
 | KV | `绑定KV空间` | KV空间键入NODE_CONFIG_LIST，存储HOST，UUID 变量|
