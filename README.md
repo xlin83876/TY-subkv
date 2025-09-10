@@ -1,4 +1,4 @@
-# 🚀 优选订阅生成器 WorkerVless2sub
+#   订阅生成器 SUB
 
 ----
 
@@ -20,8 +20,8 @@
 | PS | `【请勿测速】` | 节点名备注消息 | 
 | COLOR | `1-10` | 不同颜色主题 |
 | KV | `绑定KV空间` | KV空间键入NODE_CONFIG_LIST，存储HOST，UUID 变量|
-| UUIDAPI | `api` | 生成UUID的链接 |
-| UUIDTIME | `有效时间，以秒为单位` | 给UUID设置有效的时间，搭配UUIDAPI |
+| UUIDAPI | `生成UUID的链接` | 用API里的UUID作用到订阅里 |
+| UUIDTIME | `有效时间，24小时=86400秒` | 给UUID设置有效的时间，搭配UUIDAPI |
 | SUB_LINKS | `订阅链接` | 直接提取订阅内节点的host和uuid |
 ----
 
