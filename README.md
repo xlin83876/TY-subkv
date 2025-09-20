@@ -25,12 +25,15 @@
 | UUIDTIME | `有效时间，24小时=86400秒` | 给UUID设置有效的时间，搭配UUIDAPI，当设置此项，订阅节点第一个为到期时间提示，假的时间，真的时间必须与vless的时间相同 |
 | SUB_LINKS | `订阅链接` | 直接提取订阅内节点的host和uuid作用于订阅器 |
 | CHECK_HOST | `false默认为true` | 关掉检测KV中host有效性，只在KV中设置。不设正常检测 |
-| SUB | ``false默认为true` | 关掉订阅器功能，不设或true正常订阅 |
-
+| SUB | `false默认为true` | 关掉订阅器功能，不设或true正常订阅 |
 
 ----
-# 变量优先级
+## 变量优先级
 - UUIDAPI＞SUB_LINKS＞KV＞UUID
 - SUB_LINKS＞KV＞HOST
-
+## 代码改动说明
+- UUIDTIME提示语在代码484行
+- SUB为false提示语在代码369行
+- NODE_CONFIG_LIST全部失效提示语在429
+- html错误提示语在412
 
