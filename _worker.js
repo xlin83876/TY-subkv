@@ -283,14 +283,12 @@ export default {
         fakeUserID = `${fakeUserIDMD5.slice(0, 8)}-${fakeUserIDMD5.slice(8, 12)}-${fakeUserIDMD5.slice(12, 16)}-${fakeUserIDMD5.slice(16, 20)}-${fakeUserIDMD5.slice(20)}`;
         fakeHostName = `${fakeUserIDMD5.slice(6, 9)}.${fakeUserIDMD5.slice(13, 19)}.xyz`;
 
-        let isKVFailed = false; 
-        let isQuickSub = false;
-
+        let isKVFailed = false;
+        const subPageEnabled = (env.SUB || (env.KV ? await env.KV.get('SUB') : null)) !== 'false';
+        // --- 【全新的、正确的逻辑判断结构】 ---
         if (快速订阅访问入口.some(token => url.pathname.includes(token))) {
-            isQuickSub = true;
+            // 场景1：正确的快速订阅链接
             let dynamicUUID = null;
-
-            // --- START OF FINAL KV MODIFICATION ---
             let uuidApiSource, sniSource, typeSource, alpnSource, pathSource;
             if (env.KV) {
                 const [kvUuidApi, kvSni, kvType, kvAlpn, kvPath] = await Promise.all([
@@ -310,7 +308,7 @@ export default {
                 sniSource = env.SNI;
                 typeSource = env.TYPE;
                 alpnSource = env.ALPN;
-                pathSource = env.PATH; 
+                pathSource = env.PATH;
             }
 
             if (uuidApiSource) {
@@ -319,44 +317,69 @@ export default {
                     if (response.ok) { dynamicUUID = extractUUID(await response.text()); }
                 } catch (e) { console.error("请求 UUIDAPI 失败:", e); }
             }
-            // --- END OF FINAL KV MODIFICATION ---
-            
+
             const nodeResult = await getNextNode(env);
             const node = nodeResult.node;
             if (!node || !node.host) { return new Response("无法从任何来源获取有效的节点主机。", { status: 500 }); }
-            
             if (nodeResult.source === 'KV_FAILED_ALL') {
-                isKVFailed = true; // 设置熔断标志 (修正了原始代码的笔误)
+                isKVFailed = true;
             }
 
             host = node.host;
             const useTrojan = env.PASSWORD || node.password;
             uuid = dynamicUUID || env.PASSWORD || node.password || node.uuid;
             if (!uuid) { return new Response("无法确定有效的UUID或密码。", { status: 500 }); }
-            
-            // 应用所有从KV或环境变量中获取的配置
+
             path = pathSource || "/?ed=2560";
             sni = sniSource || host;
-            type = typeSource || type; // 'type' 是默认值 'ws'
-            alpn = alpnSource || alpn; // 'alpn' 是默认值 'h3'
-            
-            if (useTrojan) { 协议类型 = atob('VHJvamFu'); } else { 协议类型 = atob('VkxFU1M='); }
-        } else {
-            if (url.pathname === '/') {
-                return subHtml(request, theme);
-            }
+            type = typeSource || type;
+            alpn = alpnSource || alpn;
 
-            if (url.pathname.includes("/sub")) {
-                host = url.searchParams.get('host');
-                uuid = url.searchParams.get('uuid') || url.searchParams.get('password') || url.searchParams.get('pw') || url.searchParams.get('PASSWORD');
-                path = url.searchParams.get('path');
-                sni = url.searchParams.get('sni') || host;
-                type = url.searchParams.get('type') || type;
-                alpn = url.searchParams.get('alpn') || alpn;
-                if (url.searchParams.has('password') || url.searchParams.has('pw') || url.searchParams.has('PASSWORD')) { 协议类型 = atob('VHJvamFu'); } else { 协议类型 = atob('VkxFU1M='); }
-                if (!host || !uuid) { return new Response(`缺少必填参数：host 和 uuid`, { status: 400, headers: { 'content-type': 'text/plain; charset=utf-8' } }); }
-                if (!path || path.trim() === '') { path = '/?ed=2560'; } else { path = path.startsWith('/') ? path : '/' + path; }
+            if (useTrojan) { 协议类型 = atob('VHJvamFu'); } else { 协议类型 = atob('VkxFU1M='); }
+
+        } else if (subPageEnabled && url.pathname === '/') {
+            // 场景2：访问首页
+            return subHtml(request, theme);
+
+        } else if (subPageEnabled && url.pathname.includes("/sub")) {
+            // 场景3：手动生成订阅链接
+            host = url.searchParams.get('host');
+            uuid = url.searchParams.get('uuid') || url.searchParams.get('password') || url.searchParams.get('pw') || url.searchParams.get('PASSWORD');
+            path = url.searchParams.get('path');
+            sni = url.searchParams.get('sni') || host;
+            type = url.searchParams.get('type') || type;
+            alpn = url.searchParams.get('alpn') || alpn;
+            if (url.searchParams.has('password') || url.searchParams.has('pw') || url.searchParams.has('PASSWORD')) { 协议类型 = atob('VHJvamFu'); } else { 协议类型 = atob('VkxFU1M='); }
+            
+            if (!host || !uuid) { return new Response(`缺少必填参数：host 和 uuid`, { status: 400, headers: { 'content-type': 'text/plain; charset=utf-8' } }); }
+            if (!path || path.trim() === '') { path = '/?ed=2560'; } else { path = path.startsWith('/') ? path : '/' + path; }
+
+        } else {
+            // 场景4：所有其他无效路径 (Token 错误等)
+            const isSubscriptionClient = userAgent.includes('clash') || userAgent.includes('sing-box') || userAgent.includes('singbox') || userAgent.includes('v2ray') || userAgent.includes('nekobox') || userAgent.includes('shadowrocket');
+
+            if (isSubscriptionClient) {
+                // 来源是客户端 -> 返回提示节点
+                console.log("无效的订阅路径，UA为客户端，准备生成提示节点...");
+                const fallbackNode = { host: 'your-fallback-host.com', uuid: 'your-fallback-uuid-...' };
+                const errorHost = fallbackNode.host;
+                const errorUuid = fallbackNode.uuid;
+                const errorPath = "/?ed=2560", errorSni = errorHost, errorType = "ws", errorAlpn = "h3";
+                const error协议类型 = atob('VkxFU1M=');
+                const errorMessages = ['密码错误或已失效', '请去极链技术交流群', '获取最新链接', '群组t.me/jiliankeji'];
+                const errorAddresses = errorMessages.map(msg => `1.1.1.1:443#${msg}`);
+
+                const responseBody = errorAddresses.map(addressLine => {
+                    const address = "1.1.1.1", port = "443", addressid = addressLine.split('#')[1] || '';
+                    if (error协议类型 === atob('VHJvamFu')) {
+                        return `${atob('dHJvamFuOi8v') + errorUuid}@${address}:${port}?security=tls&sni=${errorSni}&fp=randomized&type=${errorType}&alpn=${encodeURIComponent(errorAlpn)}&host=${errorHost}&path=${encodeURIComponent(errorPath)}#${encodeURIComponent(addressid)}`;
+                    } else {
+                        return `${atob('dmxlc3M6Ly8=') + errorUuid}@${address}:${port}?encryption=none&security=tls&sni=${errorSni}&fp=random&type=${errorType}&alpn=${encodeURIComponent(errorAlpn)}&host=${errorHost}&path=${encodeURIComponent(errorPath)}#${encodeURIComponent(addressid)}`;
+                    }
+                }).join('\n');
+                return new Response(btoa(responseBody), { headers: { "content-type": "text/plain; charset=utf-8", "Profile-web-page-url": url.origin } });
             } else {
+                // 来源是浏览器 -> 返回HTML错误页面
                 const errorHtml = `
                 <!DOCTYPE html>
                 <html lang="zh-CN">
@@ -392,16 +415,15 @@ export default {
                     </div>
                 </body>
                 </html>`;
-
                 return new Response(errorHtml, {
-                    status: 403, // Forbidden
+                    status: 403,
                     headers: { 'Content-Type': 'text/html; charset=utf-8' }
                 });
             }
         }
 
-        // --- 【新的公共处理区域】 ---
-        // 无论走哪条路，都会在这里处理优选IP列表
+        // --- 【公共处理区域】 ---
+        // 只有场景1(快速订阅)和场景3(手动生成)会执行到这里
         if (isKVFailed) {
             console.log("KV中所有Host均失效，触发全局熔断，仅输出Fallback节点作为提示。");
             addresses = ['butong.com:443#你们真厉害',
@@ -412,7 +434,6 @@ export default {
             addressesapi = [];
             addressescsv = [];
         } else {
-            // 重置/加载所有节点来源
             addresses = [
                 'fast-10010.asuscomm.com:443#免费订阅谨防受骗',
                 'bestcf.030101.xyz:443#勿外传且用且珍惜',
@@ -420,7 +441,7 @@ export default {
             ];
             addressesapi = [];
             addressescsv = [];
-            
+
             let dlsSource, csvRemarkSource, uuidTimeSource, addSource, addApiSource, addCsvSource;
             if (env.KV) {
                 const [kvDls, kvCsvRemark, kvUuidTime, kvAdd, kvAddApi, kvAddCsv] = await Promise.all([
@@ -448,25 +469,26 @@ export default {
 
             DLS = Number(dlsSource) || DLS;
             remarkIndex = Number(csvRemarkSource) || remarkIndex;
-
+            
+            const isQuickSub = 快速订阅访问入口.some(token => url.pathname.includes(token));
             if (isQuickSub) {
                 let countdownSeconds = 0;
-                if (uuidTimeSource) { 
-                    const userSeconds = parseInt(uuidTimeSource, 10); 
-                    if (!isNaN(userSeconds) && userSeconds > 0) { 
-                        countdownSeconds = userSeconds; 
-                    } 
+                if (uuidTimeSource) {
+                    const userSeconds = parseInt(uuidTimeSource, 10);
+                    if (!isNaN(userSeconds) && userSeconds > 0) {
+                        countdownSeconds = userSeconds;
+                    }
                 }
-                if (countdownSeconds > 0) { 
-                    const expiryTime = getBeijingTime(countdownSeconds); 
-                    const countdownNode = `skk.moe:443#到期日: ${expiryTime}`; 
-                    const instructionNode = `malaysia.com:443#到期更新订阅即可`; 
-                    addresses.unshift(instructionNode); 
-                    addresses.unshift(countdownNode); 
+                if (countdownSeconds > 0) {
+                    const expiryTime = getBeijingTime(countdownSeconds);
+                    const countdownNode = `skk.moe:443#到期日: ${expiryTime}`;
+                    const instructionNode = `malaysia.com:443#到期更新订阅即可`;
+                    addresses.unshift(instructionNode);
+                    addresses.unshift(countdownNode);
                 }
             }
         }
-        
+
         const httpRegex = /^https?:\/\//i;
         addressesapi.push(...addresses.filter(item => httpRegex.test(item)));
         addresses = addresses.filter(item => !httpRegex.test(item));
@@ -729,68 +751,80 @@ async function checkNodeAvailability(host, port = 443, timeout = 1000) {
   }
 }
 async function findAvailableHostSmartly(env) {
-  if (!env.KV) {
-      return null;
-  }
-
-  const nodeListValue = await env.KV.get('NODE_CONFIG_LIST');
-  if (!nodeListValue) {
-      return null;
-  }
-
-  let hostPool;
-  try {
-      hostPool = JSON.parse(nodeListValue);
-  } catch (e) {
-      console.error("KV中NODE_CONFIG_LIST非有效JSON");
-      return null;
-  }
-
-  if (!Array.isArray(hostPool) || hostPool.length === 0) {
-      return null;
-  }
-
-  const deadListValue = await env.KV.get('DEAD_HOST_LIST');
-  let deadHosts = deadListValue ? JSON.parse(deadListValue) : [];
+    if (!env.KV) {
+        return null;
+    }
   
-  let currentIndex = await env.KV.get('node_index');
-  currentIndex = currentIndex ? parseInt(currentIndex) : 0;
-
-  for (let i = 0; i < hostPool.length; i++) {
-      if (currentIndex >= hostPool.length) {
-          currentIndex = 0;
-      }
-
-      const currentNode = hostPool[currentIndex];
-      const nextIndex = (currentIndex + 1) % hostPool.length;
-
-      if (deadHosts.includes(currentNode.host)) {
-          console.log(`Host ${currentNode.host} 在死亡名单中，跳过。`);
-          currentIndex = nextIndex;
-          continue;
-      }
-
-      const isAlive = await checkNodeAvailability(currentNode.host);
-
-      if (isAlive) {
-          await env.KV.put('node_index', nextIndex.toString());
-          return currentNode;
-      } else {
-          const deadHostSet = new Set(deadHosts);
-          deadHostSet.add(currentNode.host);
-          deadHosts = Array.from(deadHostSet);
-
-          const now = new Date();
-          const tomorrow = new Date(now);
-          tomorrow.setUTCDate(now.getUTCDate() + 1);
-          tomorrow.setUTCHours(0, 1, 0, 0);
-          
-          const ttlInSeconds = Math.max(60, Math.floor((tomorrow.getTime() - now.getTime()) / 1000));
-          
-          await env.KV.put('DEAD_HOST_LIST', JSON.stringify(deadHosts), { expirationTtl: ttlInSeconds });
-          currentIndex = nextIndex;
-      }
-  }
+    const nodeListValue = await env.KV.get('NODE_CONFIG_LIST');
+    if (!nodeListValue) {
+        return null;
+    }
+  
+    let hostPool;
+    try {
+        hostPool = JSON.parse(nodeListValue);
+    } catch (e) {
+        console.error("KV中NODE_CONFIG_LIST非有效JSON");
+        return null;
+    }
+  
+    if (!Array.isArray(hostPool) || hostPool.length === 0) {
+        return null;
+    }
+  
+    // --- [新增逻辑] 读取健康检查开关 ---
+    const checkHostValue = (env.KV ? await env.KV.get('CHECK_HOST') : env.CHECK_HOST);
+    const shouldSkipCheck = checkHostValue === 'false'; // 只有明确为'false'时才跳过
+  
+    // --- [新增逻辑] 如果跳过检查，则执行快速轮询 ---
+    if (shouldSkipCheck) {
+        let currentIndex = await env.KV.get('node_index');
+        currentIndex = currentIndex ? parseInt(currentIndex) : 0;
+        if (currentIndex >= hostPool.length) {
+            currentIndex = 0;
+        }
+        const selectedNode = hostPool[currentIndex];
+        const nextIndex = (currentIndex + 1) % hostPool.length;
+        await env.KV.put('node_index', nextIndex.toString());
+        console.log(`[Health Check Skipped] 轮询到节点: ${selectedNode.host}`);
+        return selectedNode;
+    }
+    
+    // --- [原始逻辑] 如果不跳过检查，则执行完整的健康检查 ---
+    console.log(`[Health Check Enabled] 开始检查节点...`);
+    const deadListValue = await env.KV.get('DEAD_HOST_LIST');
+    let deadHosts = deadListValue ? JSON.parse(deadListValue) : [];
+    
+    let currentIndex = await env.KV.get('node_index');
+    currentIndex = currentIndex ? parseInt(currentIndex) : 0;
+  
+    for (let i = 0; i < hostPool.length; i++) {
+        let loopIndex = (currentIndex + i) % hostPool.length;
+        const currentNode = hostPool[loopIndex];
+  
+        if (deadHosts.includes(currentNode.host)) {
+            console.log(`Host ${currentNode.host} 在死亡名单中，跳过。`);
+            continue;
+        }
+  
+        const isAlive = await checkNodeAvailability(currentNode.host);
+  
+        if (isAlive) {
+            const finalNextIndex = (loopIndex + 1) % hostPool.length;
+            await env.KV.put('node_index', finalNextIndex.toString());
+            return currentNode;
+        } else {
+            const deadHostSet = new Set(deadHosts);
+            deadHostSet.add(currentNode.host);
+            deadHosts = Array.from(deadHostSet);
+            const now = new Date();
+            const tomorrow = new Date(now);
+            tomorrow.setUTCDate(now.getUTCDate() + 1);
+            tomorrow.setUTCHours(0, 1, 0, 0);
+            const ttlInSeconds = Math.max(60, Math.floor((tomorrow.getTime() - now.getTime()) / 1000));
+            await env.KV.put('DEAD_HOST_LIST', JSON.stringify(deadHosts), { expirationTtl: ttlInSeconds });
+        }
+    }
 
   return null;
 }
